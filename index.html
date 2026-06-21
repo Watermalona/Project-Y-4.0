@@ -173,7 +173,13 @@
 				type = "trampoline";
 			}
 
-            platforms.push({ x: x, y: yPosition, width: width, height: 15, type: type });
+			// 只有普通樓梯、傳送帶或彈床有 20% 機率生出貓罐頭（刺刺樓梯不生罐頭）
+            let hasItem = false;
+            if (type !== "spike" && Math.random() < 0.20) {
+                hasItem = true;
+            }
+
+            platforms.push({ x: x, y: yPosition, width: width, height: 15, type: type, hasCan: hasItem });
         }
 
         // === 5. 遊戲主引擎 ===
@@ -207,6 +213,14 @@
                 
                 if (insideX) {
                     if (player.y + player.height >= plat.y && player.y + player.height - player.vy <= plat.y + 8) {
+					// 檢查這條樓梯有沒有罐頭，有的話就吃掉並加 1 條生命！
+                        if (plat.hasCan) {
+                            plat.hasCan = false; // 罐頭消失
+                            if (hp < 3) {        // 如果生命值還沒滿（最多 3 條命）
+                                hp++;            // 加 1 條命
+                                updateHPDisplay(); // 更新畫面上的生命顯示
+                            }
+                        }
                         if (plat.type === "spike") {
                             takeDamage();
                             player.vy = -4; 
@@ -355,6 +369,31 @@
                 else {
                     ctx.fillStyle = currentColors.color;
                     ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+                }
+				// === 在這裡加上：如果樓梯有罐頭，就把牠畫在樓梯正中央上方 ===
+                if (plat.hasCan) {
+                    let canX = plat.x + plat.width / 2; // 樓梯置中位置
+                    let canY = plat.y - 12;            // 樓梯上方 12 像素
+
+                    // 1. 畫銀色罐頭本體 (橢圓形)
+                    ctx.fillStyle = "#BDC3C7"; 
+                    ctx.beginPath();
+                    ctx.ellipse(canX, canY, 12, 6, 0, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // 2. 畫罐頭厚度
+                    ctx.fillRect(canX - 12, canY, 24, 4);
+
+                    // 3. 畫黃色貓罐頭罐身標籤
+                    ctx.fillStyle = "#F1C40F"; 
+                    ctx.fillRect(canX - 10, canY + 1, 20, 3);
+
+                    // 4. 畫罐頭頂部邊緣陰影
+                    ctx.strokeStyle = "#95A5A6";
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.ellipse(canX, canY, 12, 6, 0, 0, Math.PI * 2);
+                    ctx.stroke();
                 }
             });
         }
