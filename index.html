@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>毛毛無聊落樓梯 4.0</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #222;
+            color: white;
+            margin: 0;
+            padding: 10px;
+            /* 防止手機長按或雙擊畫面時會放大或彈出選單 */
+            touch-action: none; 
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        h1 { font-size: 20px; margin: 5px 0; }
+        p { font-size: 14px; color: #ccc; margin: 5px 0; }
+        
+        .hud-container {
+            display: flex;
+            justify-content: center;
+            gap: 25px;
+            margin-bottom: 5px;
+        }
+        h2 { font-size: 18px; margin: 5px 0; }
+        #level-text { color: #FFEC59; }
+        #hp-text { color: #FF828B; }
+
+        canvas {
+            background-color: #000;
+            border: 4px solid #fff;
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>毛毛無聊落樓梯 4.0🐱</h1>
+    <p>操控：電腦用 ⬅️ ➡️ 鍵 / 手機直接點擊【屏幕左/右半邊】移動</p>
+    
+    <div class="hud-container">
+        <h2 id="level-text">LEVEL: 1</h2>
+        <h2 id="hp-text">生命: 🐾🐾🐾</h2>
+        <h2 id="score-text">層數: 0</h2>
+    </div>
+    
+    <canvas id="gameCanvas" width="400" height="500"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const catImg = new Image();
+        catImg.src = "lightbrown_icon.png";
+
+        // === 1. 玩家角色數值 ===
+        let player = {
+            x: 188,
+            y: 50,
+            width: 36,
+            height: 36,
+            vx: 0,
+            vy: 0,
+            speed: 5,
+            gravity: 0.25,
+            facing: "right"
+        };
+
+        // === 2. 遊戲核心設定 ===
+        let platforms = [];
+        let score = 0;
+        let currentLevel = 1;
+        let hp = 3;
+        let gameOver = false;
+        let animationFrameId = null;
+        let invulnerableTimer = 0;
+
+        const levelSettings = {
+            1: { speed: 1.0, color: "#8DD7BF", spikeChance: 0.0, conveyorChance: 0.0, trampolineChance: 0.0 },
+            2: { speed: 1.3, color: "#2c94b9", spikeChance: 0.15, conveyorChance: 0.0, trampolineChance: 0.15 },
+            3: { speed: 1.6, color: "#6C88C4", spikeChance: 0.20, conveyorChance: 0.15, trampolineChance: 0.15},
+            4: { speed: 1.9, color: "#FFBF65", spikeChance: 0.25, conveyorChance: 0.25, trampolineChance: 0.20 },
+            5: { speed: 2.2, color: "#E77577", spikeChance: 0.25, conveyorChance: 0.35, trampolineChance: 0.25 }
+        };
+
+        // === 3. 操控狀態 (支援鍵盤與全屏幕觸控) ===
+        let keys = { Left: false, Right: false };
+
+        // 電腦鍵盤監聽
+        window.addEventListener("keydown", e => {
+            if (e.key === "ArrowLeft" || e.key === "Left") { keys.Left = true; player.facing = "left"; }
+            if (e.key === "ArrowRight" || e.key === "Right") { keys.Right = true; player.facing = "right"; }
+        });
+        window.addEventListener("keyup", e => {
+            if (e.key === "ArrowLeft" || e.key === "Left") keys.Left = false;
+            if (e.key === "ArrowRight" || e.key === "Right") keys.Right = false;
+        });
+
+        // === 全屏幕手機觸控邏輯 ===
+        // 用嚟記住每隻手指撳住邊一邊，防止放開一隻手指時另一隻手指都失靈 [(https://mozilla.org)]
+        let activeTouches = {};
+
+        window.addEventListener("touchstart", e => {
+            // 遍歷所有最新觸碰屏幕嘅手指 [(https://mozilla.org)]
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                let touch = e.changedTouches[i];
+                // 獲取屏幕中間嘅 X 座標
+                let screenMiddle = window.innerWidth / 2;
+                
+                if (touch.clientX < screenMiddle) {
+                    // 撳咗左邊
+                    keys.Left = true;
+                    player.facing = "left";
+                    activeTouches[touch.identifier] = "left";
+                } else {
+                    // 撳咗右邊
+                    keys.Right = true;
+                    player.facing = "right";
+                    activeTouches[touch.identifier] = "right";
+                }
+            }
+        });
+
+        window.addEventListener("touchend", e => {
+            // 當手指離開屏幕時 [(https://mozilla.org)]
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                let touch = e.changedTouches[i];
+                let side = activeTouches[touch.identifier];
+                
+                if (side === "left") keys.Left = false;
+                if (side === "right") keys.Right = false;
+                
+                delete activeTouches[touch.identifier];
+            }
+        });
+
+        // 如果手指跣出屏幕外或者彈出訊息，重置狀態
+        window.addEventListener("touchcancel", e => {
+            keys.Left = false;
+            keys.Right = false;
+            activeTouches = {};
+        });
+
+        // === 4. 樓梯生成邏輯 ===
+        function initPlatforms() {
+            platforms = [];
+            platforms.push({ x: 150, y: 150, width: 100, height: 15, type: "normal" });
+            for (let i = 1; i < 6; i++) {
+                generatePlatform(i * 85 + 150);
+            }
+        }
+
+        function generatePlatform(yPosition) {
+            let width = 80;
+            let x = Math.random() * (canvas.width - width);
+            
+            let current = levelSettings[currentLevel] || levelSettings[1];
+            let rand = Math.random();
+            let type = "normal";
+
+            if (rand < current.spikeChance) {
+                type = "spike";
+            } else if (rand < current.spikeChance + current.conveyorChance) {
+                type = Math.random() < 0.5 ? "conveyorLeft" : "conveyorRight";
+			//隨機生成彈床
+            } else if (rand < current.spikeChance + current.conveyorChance + current.trampolineChance) {
+				type = "trampoline";
+			}
+
+            platforms.push({ x: x, y: yPosition, width: width, height: 15, type: type });
+        }
+
+        // === 5. 遊戲主引擎 ===
+        function update() {
+            if (gameOver) return;
+
+            if (invulnerableTimer > 0) invulnerableTimer--;
+
+            // 移動物理反應
+            if (keys.Left) {
+                player.vx = -player.speed;
+            } else if (keys.Right) {
+                player.vx = player.speed;
+            } else {
+                player.vx = 0;
+            }
+
+            player.vy += player.gravity;
+            player.x += player.vx;
+            player.y += player.vy;
+
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+
+            let speedSetting = levelSettings[currentLevel] ? levelSettings[currentLevel].speed : 1.0;
+
+            platforms.forEach((plat, index) => {
+                plat.y -= speedSetting;
+
+                let insideX = player.x + player.width > plat.x && player.x < plat.x + plat.width;
+                
+                if (insideX) {
+                    if (player.y + player.height >= plat.y && player.y + player.height - player.vy <= plat.y + 8) {
+                        if (plat.type === "spike") {
+                            takeDamage();
+                            player.vy = -4; 
+						//處理彈跳物理反應
+						else if (plat.type === "trampoline") {
+							player.vy = -9; // 向上強力彈起
+						}
+                        } else {
+                            player.y = plat.y - player.height;
+                            player.vy = -speedSetting; 
+
+                            if (plat.type === "conveyorLeft") player.x -= 2.0;
+                            if (plat.type === "conveyorRight") player.x += 2.0;
+                        }
+                    }
+                }
+
+                if (plat.y + plat.height < 0) {
+                    platforms.splice(index, 1);
+                    generatePlatform(canvas.height);
+                    score++;
+                    checkLevelUp();
+                    document.getElementById("score-text").innerText = "層數: " + score;
+                }
+            });
+
+            // 頂部夾到
+            if (player.y <= 10) {
+                player.y = 10;
+                takeDamage();
+            }
+            
+            // 跌落深淵
+            if (player.y > canvas.height) {
+                hp = 0;
+                updateHPDisplay();
+                endGame(`貓貓跌落深淵跌死咗喇！😭`);
+                return;
+            }
+
+            if (hp <= 0) {
+                endGame(`貓貓已經耗盡所有生命值喇！😭`);
+                return;
+            }
+
+            draw();
+            animationFrameId = requestAnimationFrame(update);
+        }
+
+        function takeDamage() {
+            if (invulnerableTimer === 0) {
+                hp--;
+                invulnerableTimer = 60; 
+                updateHPDisplay();
+            }
+        }
+
+        function updateHPDisplay() {
+            let hearts = "";
+            for (let i = 0; i < hp; i++) { hearts += "🐾"; }
+            if (hearts === "") hearts = "❌ 已陣亡";
+            document.getElementById("hp-text").innerText = "生命: " + hearts;
+        }
+
+        function checkLevelUp() {
+            let nextLevel = Math.floor(score / 20) + 1;
+            if (nextLevel > 5) nextLevel = 5;
+            if (nextLevel !== currentLevel) {
+                currentLevel = nextLevel;
+                document.getElementById("level-text").innerText = "LEVEL: " + currentLevel;
+            }
+        }
+
+        // === 6. 畫面繪製功能 ===
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "red";
+            ctx.fillRect(0, 0, canvas.width, 10);
+
+           // 畫貓貓
+            if (invulnerableTimer % 8 < 4) { 
+                ctx.save(); // 儲存 Canvas 目前嘅狀態
+
+                if (player.facing === "left") {
+                    // 如果貓貓向左行，我哋將 Canvas 左右反轉嚟畫
+                    ctx.translate(player.x + player.width, player.y);
+                    ctx.scale(-1, 1);
+                    
+                    // 喺反轉咗嘅座標系統 (0, 0) 位置畫貓貓
+                    ctx.drawImage(catImg, 0, 0, player.width, player.height);
+                } else {
+                    // 如果向右行，就正常咁畫出嚟
+                    ctx.drawImage(catImg, player.x, player.y, player.width, player.height);
+                }
+
+                ctx.restore(); // 恢復 Canvas 狀態，防止後面啲樓梯跟住一齊反轉
+            }
+
+            // 畫樓梯
+            let currentColors = levelSettings[currentLevel] || levelSettings[1];
+            
+            platforms.forEach(plat => {
+                if (plat.type === "spike") {
+                    ctx.fillStyle = "#FF3333";
+                    ctx.fillRect(plat.x, plat.y + 5, plat.width, plat.height - 5);
+                    let spikeWidth = 8;
+                    for (let i = plat.x; i < plat.x + plat.width; i += spikeWidth) {
+                        ctx.beginPath(); 
+                        ctx.moveTo(i, plat.y + 5); 
+                        ctx.lineTo(i + spikeWidth / 2, plat.y - 4); 
+                        ctx.lineTo(i + spikeWidth, plat.y + 5); 
+                        ctx.fill();
+                    } //繪製彈床外觀
+				else if (plat.type === "trampoline") {
+					ctx.fillStyle = "#FF828B"; // 粉紅色彈床
+					ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+					// 畫一條內嵌的綠色彈簧線條作為視覺提示
+					ctx.strokeStyle = "#2ECC71";
+					ctx.lineWidth = 3;
+					ctx.beginPath();
+					ctx.moveTo(plat.x + 10, plat.y + 7);
+					ctx.lineTo(plat.x + plat.width - 10, plat.y + 7);
+					ctx.stroke();
+                } 
+                else if (plat.type === "conveyorLeft" || plat.type === "conveyorRight") {
+                    ctx.fillStyle = "#00E5FF";
+                    ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+                    ctx.strokeStyle = "#FFFFFF"; 
+                    ctx.lineWidth = 2; 
+                    ctx.beginPath();
+                    if (plat.type === "conveyorLeft") {
+                        ctx.moveTo(plat.x + 20, plat.y + 7); 
+                        ctx.lineTo(plat.x + 10, plat.y + 7); 
+                        ctx.lineTo(plat.x + 15, plat.y + 3); 
+                        ctx.moveTo(plat.x + 10, plat.y + 7); 
+                        ctx.lineTo(plat.x + 15, plat.y + 11);
+                    } else {
+                        ctx.moveTo(plat.x + 60, plat.y + 7); 
+                        ctx.lineTo(plat.x + 70, plat.y + 7); 
+                        ctx.lineTo(plat.x + 65, plat.y + 3); 
+                        ctx.moveTo(plat.x + 70, plat.y + 7); 
+                        ctx.lineTo(plat.x + 65, plat.y + 11);
+                    }
+                    ctx.stroke();
+                } 
+                else {
+                    ctx.fillStyle = currentColors.color;
+                    ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
+                }
+            });
+        }
+
+        // === 7. 遊戲重開 ===
+        function endGame(msg) {
+            gameOver = true;
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            setTimeout(() => {
+                alert(msg + " 最終得分: " + score + " 層");
+                startGame();
+            }, 10);
+        }
+
+        function startGame() {
+            player.x = 188; 
+            player.y = 50; 
+            player.vy = 0;
+            score = 0; 
+            currentLevel = 1; 
+            hp = 3; 
+            player.facing = "right"; 
+            invulnerableTimer = 0;
+            document.getElementById("score-text").innerText = "層數: 0";
+            document.getElementById("level-text").innerText = "LEVEL: 1";
+            updateHPDisplay();
+            keys.Left = false; 
+            keys.Right = false;
+            activeTouches = {};
+            gameOver = false;
+            initPlatforms();
+            update();
+        }
+
+        startGame();
+    </script>
+
+</body>
+</html>
