@@ -213,7 +213,6 @@
 						//處理彈跳物理反應
 						else if (plat.type === "trampoline") {
 							player.vy = -9; // 向上強力彈起
-						}
                         } else {
                             player.y = plat.y - player.height;
                             player.vy = -speedSetting; 
@@ -319,7 +318,8 @@
                         ctx.lineTo(i + spikeWidth / 2, plat.y - 4); 
                         ctx.lineTo(i + spikeWidth, plat.y + 5); 
                         ctx.fill();
-                    } //繪製彈床外觀
+                    }
+			} //繪製彈床外觀
 				else if (plat.type === "trampoline") {
 					ctx.fillStyle = "#FF828B"; // 粉紅色彈床
 					ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
