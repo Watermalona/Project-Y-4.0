@@ -174,12 +174,15 @@
 			}
 
 			// 只有普通樓梯、傳送帶或彈床有 20% 機率生出貓罐頭（刺刺樓梯不生罐頭）
+            // 限制：LEVEL 1 不生愛心，LEVEL 2 或以上才生
+            // 頻率：將機率從 20% 調低到 8%（平均每十幾條樓梯才有一顆心）
             let hasItem = false;
-            if (type !== "spike" && Math.random() < 0.20) {
+            if (currentLevel >= 2 && type !== "spike" && Math.random() < 0.08) {
                 hasItem = true;
             }
 
             platforms.push({ x: x, y: yPosition, width: width, height: 15, type: type, hasCan: hasItem });
+
         }
 
         // === 5. 遊戲主引擎 ===
@@ -370,30 +373,25 @@
                     ctx.fillStyle = currentColors.color;
                     ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
                 }
-				// === 在這裡加上：如果樓梯有罐頭，就把牠畫在樓梯正中央上方 ===
-                if (plat.hasCan) {
-                    let canX = plat.x + plat.width / 2; // 樓梯置中位置
-                    let canY = plat.y - 12;            // 樓梯上方 12 像素
+				// === 如果樓梯有道具，就把牠畫在樓梯正中央上方（改成紅心）===
+					if (plat.hasCan) {
+						let heartX = plat.x + plat.width / 2; // 愛心中心點 X
+						let heartY = plat.y - 16;            // 愛心位置 Y (往上提一點點)
 
-                    // 1. 畫銀色罐頭本體 (橢圓形)
-                    ctx.fillStyle = "#BDC3C7"; 
-                    ctx.beginPath();
-                    ctx.ellipse(canX, canY, 12, 6, 0, 0, Math.PI * 2);
-                    ctx.fill();
+						ctx.fillStyle = "#FF4A5A"; // 亮紅色
+						ctx.beginPath();
+                    // 使用貝茲曲線繪製標準愛心形狀
+						ctx.moveTo(heartX, heartY + 4);
+						ctx.bezierCurveTo(heartX - 6, heartY - 4, heartX - 12, heartY + 2, heartX, heartY + 14);
+						ctx.bezierCurveTo(heartX + 12, heartY + 2, heartX + 6, heartY - 4, heartX, heartY + 4);
+						ctx.closePath();
+						ctx.fill();
 
-                    // 2. 畫罐頭厚度
-                    ctx.fillRect(canX - 12, canY, 24, 4);
-
-                    // 3. 畫黃色貓罐頭罐身標籤
-                    ctx.fillStyle = "#F1C40F"; 
-                    ctx.fillRect(canX - 10, canY + 1, 20, 3);
-
-                    // 4. 畫罐頭頂部邊緣陰影
-                    ctx.strokeStyle = "#95A5A6";
-                    ctx.lineWidth = 1;
-                    ctx.beginPath();
-                    ctx.ellipse(canX, canY, 12, 6, 0, 0, Math.PI * 2);
-                    ctx.stroke();
+                    // 幫愛心加上白色的高光，看起來更立體
+						ctx.fillStyle = "#FFFFFF";
+						ctx.beginPath();
+						ctx.arc(heartX - 3, heartY + 1, 1.5, 0, Math.PI * 2);
+						ctx.fill();
                 }
             });
         }
