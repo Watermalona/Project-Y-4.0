@@ -211,7 +211,7 @@
                             takeDamage();
                             player.vy = -4; 
 						//處理彈跳物理反應
-						else if (plat.type === "trampoline") {
+						} else if (plat.type === "trampoline") {
 							player.vy = -9; // 向上強力彈起
                         } else {
                             player.y = plat.y - player.height;
@@ -320,7 +320,7 @@
                         ctx.fill();
                     }
 			} //繪製彈床外觀
-				else if (plat.type === "trampoline") {
+				} else if (plat.type === "trampoline") {
 					ctx.fillStyle = "#FF828B"; // 粉紅色彈床
 					ctx.fillRect(plat.x, plat.y, plat.width, plat.height);
 					// 畫一條內嵌的綠色彈簧線條作為視覺提示
